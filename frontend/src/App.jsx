@@ -4,7 +4,6 @@ import MapView from './components/MapView'
 import { getMockAmostra } from './data/mockAmostra'
 import './App.css'
 
-const MOCK_SAMPLE_SIZE = 50
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function App() {
@@ -15,15 +14,16 @@ export default function App() {
   const [limitesGeoJson, setLimitesGeoJson] = useState(null) // boundary polygon for selected municipio
   const [extraLayerGeoJson, setExtraLayerGeoJson] = useState(null) // parks, forests, lakes (e.g. Campinas)
 
-  const handleSearch = useCallback(async (mun) => {
+  const handleSearch = useCallback(async (mun, n = 50) => {
     setLoading(true)
     setMunicipio(mun)
     setSource(null)
     setLimitesGeoJson(null)
     setExtraLayerGeoJson(null)
+    const sampleSize = Math.min(500, Math.max(1, Number(n) || 50))
     try {
       const res = await fetch(
-        `${API_BASE}/api/amostra?municipio=${encodeURIComponent(mun)}&n=${MOCK_SAMPLE_SIZE}`
+        `${API_BASE}/api/amostra?municipio=${encodeURIComponent(mun)}&n=${sampleSize}`
       )
       if (res.ok) {
         const data = await res.json()
@@ -54,12 +54,12 @@ export default function App() {
           // ignore; no extra layer for this municipio
         }
       } else {
-        const result = getMockAmostra(mun, MOCK_SAMPLE_SIZE)
+        const result = getMockAmostra(mun, sampleSize)
         setPoints(result)
         setSource('mock')
       }
     } catch {
-      const result = getMockAmostra(mun, MOCK_SAMPLE_SIZE)
+      const result = getMockAmostra(mun, sampleSize)
       setPoints(result)
       setSource('mock')
     } finally {
