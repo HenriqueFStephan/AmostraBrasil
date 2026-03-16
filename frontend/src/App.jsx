@@ -1,0 +1,84 @@
+import React, { useState, useCallback } from 'react'
+import TopBar from './components/TopBar'
+import MapView from './components/MapView'
+import { getMockAmostra } from './data/mockAmostra'
+import './App.css'
+
+const MOCK_SAMPLE_SIZE = 50
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+export default function App() {
+  const [points, setPoints] = useState([])
+  const [municipio, setMunicipio] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [source, setSource] = useState(null) // 'cnefe2022' | 'mock'
+  const [limitesGeoJson, setLimitesGeoJson] = useState(null) // boundary polygon for selected municipio
+  const [extraLayerGeoJson, setExtraLayerGeoJson] = useState(null) // parks, forests, lakes (e.g. Campinas)
+
+  const handleSearch = useCallback(async (mun) => {
+    setLoading(true)
+    setMunicipio(mun)
+    setSource(null)
+    setLimitesGeoJson(null)
+    setExtraLayerGeoJson(null)
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/amostra?municipio=${encodeURIComponent(mun)}&n=${MOCK_SAMPLE_SIZE}`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setPoints(data.points || [])
+        setSource(data.source || 'cnefe2022')
+        // Fetch municipality boundary to highlight on map (BR_Municipios_2024)
+        try {
+          const limRes = await fetch(
+            `${API_BASE}/api/municipio/limites?municipio=${encodeURIComponent(mun)}`
+          )
+          if (limRes.ok) {
+            const geojson = await limRes.json()
+            setLimitesGeoJson(geojson)
+          }
+        } catch {
+          // ignore; map will show points without boundary highlight
+        }
+        // Extra layer (parks, lakes, forests) — only available for Campinas for now
+        try {
+          const extraRes = await fetch(
+            `${API_BASE}/api/municipio/extra-layer?municipio=${encodeURIComponent(mun)}`
+          )
+          if (extraRes.ok) {
+            const geojson = await extraRes.json()
+            setExtraLayerGeoJson(geojson)
+          }
+        } catch {
+          // ignore; no extra layer for this municipio
+        }
+      } else {
+        const result = getMockAmostra(mun, MOCK_SAMPLE_SIZE)
+        setPoints(result)
+        setSource('mock')
+      }
+    } catch {
+      const result = getMockAmostra(mun, MOCK_SAMPLE_SIZE)
+      setPoints(result)
+      setSource('mock')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return (
+    <div className="app">
+      <TopBar onSearch={handleSearch} loading={loading} />
+      <div className="app-map-rect">
+        <MapView
+          points={points}
+          municipio={municipio}
+          source={source}
+          limitesGeoJson={limitesGeoJson}
+          extraLayerGeoJson={extraLayerGeoJson}
+        />
+      </div>
+    </div>
+  )
+}

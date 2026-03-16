@@ -1,0 +1,10 @@
+# AmostraBrasil Python backend
+# Python 3.8+
+
+pandas>=1.2.0
+requests>=2.25.0
+geopandas>=0.10.0
+shapely>=2.0.0
+
+# Testing
+pytest>=6.0
