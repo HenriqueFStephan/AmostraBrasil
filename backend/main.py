@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "py"))
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -31,15 +32,27 @@ app.add_middleware(
 def get_amostra(
     municipio: str = Query(..., description="Nome do município (ex: São Paulo, Pindoba)"),
     n: int = Query(50, ge=1, le=500, description="Número de pontos na amostra (1–500)"),
+    codibge: str | None = Query(
+        None,
+        min_length=7,
+        max_length=7,
+        description="Código de município IBGE (7 dígitos, opcional)",
+    ),
 ):
     """
     Return a sample of address coordinates for the given municipality.
     Uses IBGE Censo 2022 – Coordenadas dos Endereços (ZIP/CSV per municipio).
+
+    Prefer using codibge when available to evitar ambiguidade de nomes.
     """
-    log.info("GET /api/amostra municipio=%r n=%s", municipio, n)
+    log.info("GET /api/amostra municipio=%r codibge=%r n=%s", municipio, codibge, n)
     try:
         from amostra_brasil import fetch_municipio_coords_2022
-        points = fetch_municipio_coords_2022(municipio=municipio, n_sample=n)
+        points = fetch_municipio_coords_2022(
+            codibge=codibge or "",
+            municipio=municipio,
+            n_sample=n,
+        )
     except ValueError as e:
         log.warning("amostra 404: municipio=%r error=%s", municipio, e)
         detail = str(e)
@@ -146,3 +159,31 @@ def get_extra_layer(
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/municipios")
+def list_municipios():
+    """
+    Return list of municipalities (UF, MUNICIPIO, CODIBGE) for frontend autocomplete.
+    Uses cached IBGE localidades API when available; falls back to bundled CSV.
+    """
+    try:
+        from amostra_brasil.municipios import load_municipios
+
+        try:
+            df = load_municipios(use_api=True)
+        except Exception:
+            df = load_municipios(use_api=False)
+
+        rows = []
+        for _, r in df.iterrows():
+            uf = str(r.get("UF", "")).strip()
+            mun = str(r.get("MUNICIPIO", "")).strip()
+            codibge = str(r.get("CODIBGE", "")).zfill(7)
+            if not uf or not mun:
+                continue
+            rows.append({"uf": uf, "municipio": mun, "codibge": codibge})
+        return JSONResponse(content=rows)
+    except Exception as e:
+        log.exception("erro ao listar municipios")
+        raise HTTPException(status_code=502, detail=f"Erro ao listar municípios: {e}")
