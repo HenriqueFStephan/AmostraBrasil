@@ -82,11 +82,33 @@ def get_amostra(
     # Normalize for frontend: ensure endIBGE-like and setor for popup
     out = []
     for i, p in enumerate(points):
+        # Endereço (quando existir) + coordenadas em graus decimais.
+        endereco = None
+        # Tentar campos mais prováveis primeiro
+        for key in ("endereco", "endereco_completo", "no_logradouro", "logradouro", "nome_logradouro"):
+            if key in p and p[key]:
+                endereco = str(p[key])
+                break
+        # Se ainda não achar, procurar qualquer coluna que pareça endereço/logradouro
+        if not endereco:
+            for k, v in p.items():
+                ku = str(k).upper()
+                if any(token in ku for token in ("ENDERECO", "LOGRADOURO", "NM_LOGRAD")) and v:
+                    endereco = str(v)
+                    break
+        try:
+            coord_txt = f"Lat: {p['lat']:.6f}; Lng: {p['lng']:.6f}"
+        except Exception:
+            coord_txt = f"Lat: {p.get('lat')}; Lng: {p.get('lng')}"
+        if endereco:
+            popup_text = f"{endereco}\n{coord_txt}"
+        else:
+            popup_text = coord_txt
         row = {
             "lat": p["lat"],
             "lng": p["lng"],
             "tipo": p.get("tipo"),
-            "endIBGE": p.get("endereco") or p.get("endereco_completo") or f"Endereço {i + 1}, {municipio}",
+            "endIBGE": popup_text,
             "setor": p.get("setor") or p.get("cod_setor"),
             "Status": "OK",
         }
